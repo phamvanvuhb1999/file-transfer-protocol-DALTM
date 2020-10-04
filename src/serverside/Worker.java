@@ -79,7 +79,7 @@ public class Worker extends Thread
         super();
         this.controlSocket = client;
         this.dataPort = dataPort;
-        this.currDirectory = System.getProperty("user.dir") + "/test";
+        this.currDirectory = System.getProperty("user.dir") + "/data";
         this.root = System.getProperty("user.dir");
     }
     
@@ -553,7 +553,7 @@ public class Worker extends Thread
         int p1 = dataPort/256;
         int p2 = dataPort%256;
         
-        sendMsgToClient("227 Entering Passive Mode ("+ myIpSplit[0] +"," + myIpSplit[1] + "," + myIpSplit[2] + "," + myIpSplit[3] + "," + p1 + "," + p2 +")");
+        sendMsgToClient("227 Entering Passive Mode ("+ myIpSplit[0] +"," + myIpSplit[1] + "," + myIpSplit[2] + "," + myIpSplit[3] + "," + p1 + "," + p2);
         
         openDataConnectionPassive(dataPort);
 
@@ -666,18 +666,20 @@ public class Worker extends Thread
      */
     private void handleType(String mode)
     {
-        if(mode.toUpperCase().equals("A"))
+        if(mode.equals("A"))
         {
             transferMode = transferType.ASCII;
             sendMsgToClient("200 OK");
+            debugOutput("200 ");
         }
-        else if(mode.toUpperCase().equals("I"))
+        else if(mode.equals("I"))
         {
             transferMode = transferType.BINARY;
             sendMsgToClient("200 OK");
         }
-        else
-            sendMsgToClient("504 Not OK");;
+        else {
+            sendMsgToClient("504 Not OK");
+        }
             
     }
     
