@@ -666,11 +666,13 @@ public class Worker extends Thread
      */
     private void handleType(String mode)
     {
+        if(mode == null){
+            return;
+        }
         if(mode.equals("A"))
         {
             transferMode = transferType.ASCII;
             sendMsgToClient("200 OK");
-            debugOutput("200 ");
         }
         else if(mode.equals("I"))
         {
@@ -858,6 +860,7 @@ public class Worker extends Thread
                         {
                             fout.write(buf,0,l);
                         }
+                        
                     }
                     catch (IOException e)
                     {
@@ -909,6 +912,7 @@ public class Worker extends Thread
                         while((s = rin.readLine()) != null)
                         {
                             rout.println(s);
+                            //debugOutput(s);
                         }
                     } catch (IOException e)
                     {

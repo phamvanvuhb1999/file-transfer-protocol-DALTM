@@ -5,6 +5,9 @@ import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.InetAddress;
@@ -28,11 +31,10 @@ public class Client {
     private String ServerAddress;
 
     //data Connection 
-    //private ServerSocket dataSocket;
     private Socket dataConnection;
     private PrintWriter dataOutWriter;
-
-    private int dataPort;
+    //private int dataPort;
+    
     private transferType transferMode = transferType.ASCII;
 
     private boolean quitCommandLoop = false;
@@ -45,7 +47,14 @@ public class Client {
     {
         Client client = new Client("localhost", 1234);
         System.out.println(client.loggin("comp4621", "network"));
-        client.Post1("filename.txt");
+
+        //store a file
+        client.Store("filename.txt");
+
+        //download file
+        client.download("file.txt");
+
+        client.download("yours.png");
         while(true){
             
         }
@@ -128,123 +137,33 @@ public class Client {
             System.out.println(msg);
         }
     }
-    private void POST(String filename){
-        if(this.controlSocket == null || this.controlOutWriter == null || this.controlIn == null){
-            DebugMsg("Control connection is not ready");
-        }else {
-            controlOutWriter.println("PASV");
-            //long prev = new Date().getTime();
-            boolean flag = false;
-            while(flag==false){
-                try{
-                    String response = controlIn.readLine();
-                    String[] res = response.split(",");
-                    int port = Integer.parseInt(res[res.length-1])+Integer.parseInt(res[res.length-2])*256;
-                    this.dataPort = port;
-                    DebugMsg(response);
-                    if(response.split(" ")[0].equals("227")){//check for server ready
-                        //control type to write and read data BINARY or ASCII
-                        int index = filename.lastIndexOf(".");
-                        String typeFile = filename.substring(index+1, filename.length()).toLowerCase();
-                        this.transferMode = transferType.BINARY;
-                        //reach file transfer type by file input type
-                        for(String type : Client.shouldASCII){
-                            if(typeFile.equals(type)){
-                                this.transferMode = transferType.ASCII;
-                                break;
-                            }
-                        }
 
-                        //send server filetype to set file receive
-                        if(transferMode == transferType.ASCII){
-                            controlOutWriter.println("TYPE A");
-                        }else{
-                            controlOutWriter.println("TYPE I");
-                        }
-                        boolean flag1 = false;
-                        while(flag1==false){
-                            String response1 = controlIn.readLine();
-                            if(!response1.equals("")){
-                                DebugMsg(response1);
-                                if(response1.split(" ")[0].equals("200")){
-                                    //after set file type transfer 200 OK, we send filename to server
-                                    controlOutWriter.println("STOR " + filename);
-                                    flag1 = true;
-                                }else{
-                                    DebugMsg("Could not set file transfer type to server");
-                                    return;
-                                }
-                            } 
-                        }
-                        //send server filename need to store and stringcontrol STOR
-                        long prev2 = new Date().getTime();
-                        while(new Date().getTime() - prev2 < 5000 && flag==false){//wait to client receive stringcontrol
-                            response = controlIn.readLine();
-                            if(!response.split(" ")[0].equals("150")){
-                                return;
-                            }
-                            else {
-                                //open data connection
-                                openDataConnectionPasv(this.dataPort);
-                                BufferedInputStream is;
-                                BufferedOutputStream os;
-                                File input = new File(this.directory + filename);
-                                
-                                is = new BufferedInputStream(new FileInputStream(input));
-                                os = new BufferedOutputStream(dataConnection.getOutputStream());
-
-                                //call and start send thread
-                                new Sender(is,os).start();
-                                //wait for finished flag from server
-                                long prev3 = new Date().getTime();
-                                while(new Date().getTime() - prev3 < 5000 && flag==false){
-                                    response = controlIn.readLine().split(" ")[0];
-                                    if(response.equals("226")){
-                                        flag = true;
-                                        DebugMsg("Send file to server successfuly.");
-                                        closeDataConnection();
-                                    }else {
-                                        return;
-                                    }
-                                }
-                            }
-                            
-                        }
-                    }
-                }catch(Exception e){
-                    DebugMsg("Could not send data to server");
-                    e.printStackTrace();
-                }
-                
-            }
-        }
-    }
-    private boolean Post1(String filename){
-        if(this.controlSocket == null || this.controlOutWriter == null || this.controlIn == null){
-            DebugMsg("Control connection is not ready");
-            return false;
-        }else {
+    private boolean SetDataType(){
             try{
-                controlOutWriter.println("PASV");
+                if(this.transferMode == transferType.ASCII){
+                    controlOutWriter.println("TYPE A");
+                }else {
+                    controlOutWriter.println("TYPE I");
+                }
+                DebugMsg("Set type: " + this.transferMode);
+
+                String resType = controlIn.readLine().split(" ")[0];
+                //DebugMsg(resType);
+                if(resType.equals("200")){
+                    return true;
+                }
+                return false;
             }catch(Exception e){
                 e.printStackTrace();
-                DebugMsg("Could send PASV request to serverfile");
-            }
-        }
-        String response="";
-        try{
-            response = controlIn.readLine();
-            DebugMsg(response);
-        }catch(Exception e){
-            e.printStackTrace();
-            DebugMsg("Could not receive response PASV");
-        }
-        String[] resList = response.split(",");
-        int port = Integer.parseInt(resList[resList.length-1]) + Integer.parseInt(resList[resList.length-2])*256;
-        DebugMsg(port+"");
-        this.dataPort = port;
-        boolean flag = false;
-        if(response.split(" ")[0].equals("227")){
+                DebugMsg("Could request datatype");
+                return false;
+            }      
+    }
+
+    private void ChangeMyDataType(String filename){
+        if(filename == null){
+            return;
+        }else {
             int index = filename.lastIndexOf(".");
             String typeFile = filename.substring(index+1, filename.length()).toLowerCase();
             this.transferMode = transferType.BINARY;
@@ -252,26 +171,60 @@ public class Client {
             for(String type : Client.shouldASCII){
                 if(typeFile.equals(type)){
                     this.transferMode = transferType.ASCII;
-                    break;
+                    return;
                 }
+            } 
+        }
+    }
+
+    private void openPassive(){
+        try{
+            controlOutWriter.println("PASV");
+            boolean flag = false;
+            while(!flag){
+                String response = controlIn.readLine().trim();
+                String[] resPasv = response.split(" ");
+                if(resPasv[0].equals("227")){
+                    String[] prPort = response.split(",");
+                    int dtPort = Integer.parseInt(prPort[prPort.length - 1])  + 256*Integer.parseInt(prPort[prPort.length - 2]);
+                    DebugMsg(dtPort+"");
+                    openDataConnectionPasv(dtPort);
+                    flag = true;
+                }
+                
             }
-            if(this.transferMode == transferType.ASCII){
-                controlOutWriter.println("TYPE A");
-            }else {
-                controlOutWriter.println("TYPE I");
-            }
-            return true;
-        }else{
-            return false;
+
+        }catch(Exception e){
+            e.printStackTrace();
+            DebugMsg("Could not open PASSIVE mode.");
         }
         
+
     }
+   
+    private boolean CheckControlConnect(){
+        if(this.controlSocket == null || this.controlOutWriter == null || this.controlIn == null){
+            DebugMsg("Control connection is not ready");
+            return false;
+        }else {
+            return true;
+        }
+    }
+    private boolean CheckDataConnect(){
+        if(this.dataConnection == null || this.dataOutWriter == null){
+            return false;
+        }else {
+            return true;
+        }
+    }
+    
     private void openDataConnectionPasv(int port){
         try{
             dataConnection = new Socket("localhost", port);
             dataOutWriter = new PrintWriter(new OutputStreamWriter(dataConnection.getOutputStream()));
+            DebugMsg("Open dataconnection passive for client.");
         }catch(Exception e){
-            DebugMsg("Could not opne data connection pasv mode");
+            DebugMsg("Could not open data connection pasv mode");
             e.printStackTrace();
         }
     }
@@ -288,12 +241,116 @@ public class Client {
         }
     }
 
+    private void Store(String filename){
+        //set my transfer type
+        ChangeMyDataType(filename);
+        //set server handler transfer type
+        SetDataType();
+        //open data connection passive server
+        openPassive();
+        try{
+            File file = new File(directory+filename);
+            if(!file.exists() || !CheckDataConnect()){
+                return;
+            }
+            controlOutWriter.println("STOR " + filename);
+            String resStor = controlIn.readLine();
+            DebugMsg(resStor);
+            if(resStor.split(" ")[0].equals("150") && CheckDataConnect()){
+                if(this.transferMode == transferType.BINARY){
+                    BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
+                    BufferedOutputStream bos = new BufferedOutputStream(dataConnection.getOutputStream());
+
+                    DebugMsg("Starting sending file " + filename);
+                    SenderI sender = new SenderI(bis, bos);
+                    sender.start();
+                    sender.join();
+
+                    DebugMsg("Finished send file");
+                }else {
+                    BufferedReader rin = new BufferedReader(new FileReader(file));
+                    //PrintWriter rout = new PrintWriter(dataConnection.getOutputStream(), true);
+                    SenderA sender = new SenderA(rin, this.dataOutWriter);
+                    sender.start();
+                    sender.join();
+
+                    DebugMsg("Finished send file .");
+                }
+            } else {
+                DebugMsg("Could not sending file to server.");
+            }
+            closeDataConnection();
+
+        }catch(Exception e){
+            e.printStackTrace();
+            DebugMsg("Could not send request STOR.");
+        }
+    }
+    private void download(String filename){
+        File file = new File(this.directory + filename);
+        if(file.exists()){
+            return;
+        }
+        
+        //send PASV , receive response and open dataconnection on port
+        if(!CheckControlConnect()){
+            return;
+        }
+        openPassive();
+        //set transfer type for client
+        ChangeMyDataType(filename);
+        if(!SetDataType()){
+            DebugMsg("Could not set datatype transfer for the server.");
+        }
+        if(CheckDataConnect()){
+            try{
+                controlOutWriter.println("RETR " + filename);
+                String response = controlIn.readLine();
+                DebugMsg(response);
+                if(response.split(" ")[0].equals("150")){
+                    if(transferMode == transferType.ASCII){
+                        BufferedReader rin = new BufferedReader(new InputStreamReader(dataConnection.getInputStream()));
+                        PrintWriter rout = new PrintWriter(new FileOutputStream(file), true);
+                        ReceiverA receive = new ReceiverA(rin, rout);
+                        receive.start();
+                        receive.join();
+
+                        DebugMsg("Finished receive file from server. by " + this.transferMode.toString());
+                    }else {
+                        BufferedInputStream fin = new BufferedInputStream(dataConnection.getInputStream());
+                        BufferedOutputStream fout = new BufferedOutputStream(new FileOutputStream(file));
+
+                        ReceiverI receive = new ReceiverI(fin, fout);
+                        receive.start();
+                        receive.join();
+                        DebugMsg("Finished receive file from server. by " + this.transferMode.toString());
+
+                        fout.close();
+                        fin.close();
+                    }
+                    closeDataConnection();
+                }else {
+                    DebugMsg("File " + filename + " is not exists on server.");
+                    return;
+                }
+
+            }catch(Exception e){
+                e.printStackTrace();
+                DebugMsg("NO contact to server.");
+            }
+            
+        }
+
+        
+    }
+
 }
 
-class Sender extends Thread{
+
+class SenderI extends Thread{
     private BufferedInputStream is;
     private BufferedOutputStream os;
-    public Sender(BufferedInputStream is, BufferedOutputStream os){
+    public SenderI(BufferedInputStream is, BufferedOutputStream os){
         this.is = is;
         this.os = os;
     }
@@ -314,8 +371,73 @@ class Sender extends Thread{
         }
     }
 }
-// class Receiver extends Thread{
-//     private BufferedInputStream is;
-//     private BufferedOutputStream os;
-//     public Receiver()
-// }
+
+class SenderA extends Thread{
+    private BufferedReader bfr;
+    private PrintWriter prw;
+    public SenderA(BufferedReader bfr, PrintWriter prw){
+        this.bfr = bfr;
+        this.prw = prw;
+    }
+    @Override
+    public void run() {
+        String s;
+        try{
+            while((s = bfr.readLine()) != null){
+                prw.println(s);
+                System.out.println(s);
+            }
+            prw.flush();
+
+            bfr.close();
+            //prw.close();
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+}
+class ReceiverI extends Thread{
+    private BufferedInputStream is;
+    private BufferedOutputStream os;
+    public ReceiverI(BufferedInputStream is, BufferedOutputStream os){
+        this.is = is;
+        this.os = os;
+    }
+    @Override
+    public void run() {
+        byte[] buf = new byte[1024];
+        int len = 0;
+        try{
+            while((len = is.read(buf, 0, 1024)) != -1){
+                os.write(buf, 0, len);
+            }
+            os.flush();
+            is.close();
+            os.close();
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+    }
+}
+
+class ReceiverA extends Thread {
+    BufferedReader in;
+    PrintWriter out;
+    public ReceiverA(BufferedReader in, PrintWriter out){
+        this.in = in;
+        this.out = out;
+    }
+    @Override
+    public void run() {
+        String s;
+        try{
+            while((s = in.readLine()) != null){
+                out.println(s);
+            }
+            in.close();
+            out.close();
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+    }
+}
